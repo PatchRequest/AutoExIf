@@ -43,17 +43,18 @@ class DocumentSpider(scrapy.Spider):
         self.found_urls = found_urls
 
     def parse(self, response):
-        # Check if the current response is itself a document (by Content-Type)
         content_type = response.headers.get("Content-Type", b"").decode("utf-8", errors="ignore")
         mime = content_type.split(";")[0].strip().lower()
-        if mime in MIME_TO_CATEGORY:
+
+        # Non-text response — treat as a discovered document
+        if not mime.startswith("text/") and mime != "application/xhtml+xml":
             url = response.url
             if url not in self.found_urls:
                 self.found_urls.add(url)
                 yield {"url": url}
             return
 
-        # Extract all links from the page
+        # Text/HTML response — extract links
         for href in response.css("a::attr(href)").getall():
             url = response.urljoin(href)
 

@@ -1,12 +1,14 @@
 """Scrapy spider that crawls websites to discover document/media URLs."""
 
+import json
 import tempfile
+from pathlib import Path
 from urllib.parse import urlparse
 
 import scrapy
 from scrapy.crawler import CrawlerProcess
 
-from autoexif.filetypes import is_document_url
+from autoexif.filetypes import MIME_TO_CATEGORY, is_document_url
 
 
 def extract_allowed_domains(start_urls: list[str]) -> list[str]:
@@ -41,6 +43,16 @@ class DocumentSpider(scrapy.Spider):
         self.found_urls = found_urls
 
     def parse(self, response):
+        # Check if the current response is itself a document (by Content-Type)
+        content_type = response.headers.get("Content-Type", b"").decode("utf-8", errors="ignore")
+        mime = content_type.split(";")[0].strip().lower()
+        if mime in MIME_TO_CATEGORY:
+            url = response.url
+            if url not in self.found_urls:
+                self.found_urls.add(url)
+                yield {"url": url}
+            return
+
         # Extract all links from the page
         for href in response.css("a::attr(href)").getall():
             url = response.urljoin(href)
@@ -52,6 +64,7 @@ class DocumentSpider(scrapy.Spider):
                     yield {"url": url}
             elif is_same_domain(url, self._allowed_domains):
                 # Same-domain HTML page — follow it
+                # Scrapy's DUPEFILTER handles already-visited URLs
                 yield response.follow(url, callback=self.parse)
 
 
@@ -100,9 +113,6 @@ def run_spider(
     process.start()
 
     # Read collected URLs from the temp file
-    import json
-    from pathlib import Path
-
     content = Path(tmp_path).read_text()
     for line in content.strip().splitlines():
         if line.strip():

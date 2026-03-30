@@ -27,7 +27,7 @@ def download_file(url: str, download_dir: Path, session: requests.Session) -> Pa
         from urllib.parse import urlparse
 
         parsed = urlparse(url)
-        filename = Path(parsed.path).name
+        filename = PurePosixPath(parsed.path).name
         if not filename:
             filename = "unknown_file"
 

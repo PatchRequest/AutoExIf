@@ -53,17 +53,13 @@ def build_parser():
 
 
 def main():
-    from autoexif.dork import duckduckgo_search
-    from autoexif.pipeline import download_files, extract_all_metadata, write_csv, write_json, format_summary
-    from autoexif.spider import run_spider
-
     parser = build_parser()
     args = parser.parse_args()
 
     download_dir = Path(args.download_dir)
     download_dir.mkdir(parents=True, exist_ok=True)
 
-    # Step 1: Get URLs
+    # Step 1: Get URLs — import only the module needed for the chosen mode
     if args.urls_file:
         urls_path = Path(args.urls_file)
         if not urls_path.exists():
@@ -77,6 +73,8 @@ def main():
         print(f"[+] Loaded {len(urls)} URLs from {args.urls_file}")
 
     elif args.crawl:
+        from autoexif.spider import run_spider
+
         print(f"[*] Crawling {len(args.crawl)} site(s) (depth={args.depth})...")
         urls = run_spider(
             start_urls=args.crawl,
@@ -87,12 +85,16 @@ def main():
         )
 
     else:
+        from autoexif.dork import duckduckgo_search
+
         print(f"[*] Dorking: {args.dork}")
         urls = duckduckgo_search(args.dork, args.limit)
 
     if not urls:
         print("[!] No URLs found.")
         sys.exit(0)
+
+    from autoexif.pipeline import download_files, extract_all_metadata, write_csv, write_json, format_summary
 
     # Step 2: Download
     print(f"\n[*] Downloading {len(urls)} files...")

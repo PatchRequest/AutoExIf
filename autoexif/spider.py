@@ -14,8 +14,21 @@ from twisted.internet._sslverify import ClientTLSOptions
 
 from autoexif.filetypes import MIME_TO_CATEGORY, is_document_url
 
-# Silence noisy TLS hostname mismatch warnings from Scrapy
-logging.getLogger("scrapy.core.downloader.tls").setLevel(logging.ERROR)
+_NOISY_LOGGERS = (
+    "scrapy.core.downloader.tls",
+    "scrapy.downloadermiddlewares.retry",
+    "scrapy.downloadermiddlewares.robotstxt",
+    "scrapy.core.scraper",
+    "scrapy.core.engine",
+    "scrapy.spidermiddlewares.httperror",
+    "py.warnings",
+)
+
+
+def _silence_scrapy_loggers():
+    """Mute noisy Scrapy loggers — must be called after CrawlerProcess init."""
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.CRITICAL)
 
 
 class _NoVerifyTLSOptions(ClientTLSOptions):
@@ -62,11 +75,23 @@ def is_same_domain(url: str, allowed_domains: list[str]) -> bool:
 class DocumentSpider(scrapy.Spider):
     name = "document_spider"
 
-    def __init__(self, start_urls, allowed_domains, found_urls, *args, **kwargs):
+    def __init__(self, start_urls, allowed_domains, found_urls, failed_hosts, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.start_urls = start_urls
         self._allowed_domains = allowed_domains
         self.found_urls = found_urls
+        self.failed_hosts = failed_hosts
+
+    def start_requests(self):
+        for url in self.start_urls:
+            yield scrapy.Request(url, callback=self.parse, errback=self.on_error)
+
+    def on_error(self, failure):
+        url = failure.request.url
+        host = urlparse(url).hostname or url
+        if host not in self.failed_hosts:
+            self.failed_hosts.add(host)
+            print(f"    [!] Skipping {host} (unreachable)")
 
     def parse(self, response):
         content_type = response.headers.get("Content-Type", b"").decode("utf-8", errors="ignore")
@@ -92,7 +117,7 @@ class DocumentSpider(scrapy.Spider):
             elif is_same_domain(url, self._allowed_domains):
                 # Same-domain HTML page — follow it
                 # Scrapy's DUPEFILTER handles already-visited URLs
-                yield response.follow(url, callback=self.parse)
+                yield response.follow(url, callback=self.parse, errback=self.on_error)
 
 
 def run_spider(
@@ -105,6 +130,7 @@ def run_spider(
     """Run the Scrapy spider and return discovered document URLs."""
     allowed_domains = extract_allowed_domains(start_urls)
     found_urls: set[str] = set()
+    failed_hosts: set[str] = set()
     collected: list[str] = []
 
     # Write results to a temp file to decouple from Scrapy's reactor
@@ -119,7 +145,7 @@ def run_spider(
         "CONCURRENT_REQUESTS_PER_DOMAIN": concurrency,
         "ROBOTSTXT_OBEY": not ignore_robots,
         "DOWNLOADER_CLIENTCONTEXTFACTORY": "autoexif.spider.NoVerifyContextFactory",
-        "LOG_LEVEL": "WARNING",
+        "LOG_LEVEL": "ERROR",
         "REQUEST_FINGERPRINTER_IMPLEMENTATION": "2.7",
         "FEEDS": {
             tmp_path: {
@@ -132,11 +158,13 @@ def run_spider(
     }
 
     process = CrawlerProcess(settings=settings)
+    _silence_scrapy_loggers()
     process.crawl(
         DocumentSpider,
         start_urls=start_urls,
         allowed_domains=allowed_domains,
         found_urls=found_urls,
+        failed_hosts=failed_hosts,
     )
     process.start()
 

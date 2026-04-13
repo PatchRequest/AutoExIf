@@ -29,6 +29,7 @@ def duckduckgo_search(dork: str, limit: int) -> list[str]:
     """Scrape DuckDuckGo HTML search results for the given dork query."""
     urls: list[str] = []
     session = requests.Session()
+    session.verify = False
     session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
 
     page = 0

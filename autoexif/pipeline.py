@@ -9,8 +9,11 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 
 import requests
+import urllib3
 
 from autoexif.filetypes import get_file_category
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -61,6 +64,7 @@ def download_files(
     """Download all URLs. Returns list of (url, local_path) for successes."""
     if session is None:
         session = requests.Session()
+        session.verify = False
         session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
 
     downloaded: list[tuple[str, Path]] = []

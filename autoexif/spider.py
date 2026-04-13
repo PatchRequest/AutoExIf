@@ -141,9 +141,11 @@ def run_spider(
     settings = {
         "DEPTH_LIMIT": depth,
         "DOWNLOAD_DELAY": delay,
-        "CONCURRENT_REQUESTS": concurrency,
         "CONCURRENT_REQUESTS_PER_DOMAIN": concurrency,
         "ROBOTSTXT_OBEY": not ignore_robots,
+        "DOWNLOAD_TIMEOUT": 15,
+        "RETRY_TIMES": 1,
+        "CONCURRENT_REQUESTS": max(concurrency, len(start_urls)),
         "DOWNLOADER_CLIENTCONTEXTFACTORY": "autoexif.spider.NoVerifyContextFactory",
         "LOG_LEVEL": "ERROR",
         "REQUEST_FINGERPRINTER_IMPLEMENTATION": "2.7",

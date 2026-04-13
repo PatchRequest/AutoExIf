@@ -7,10 +7,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import scrapy
-from OpenSSL import SSL
-from scrapy.core.downloader.contextfactory import ScrapyClientContextFactory
 from scrapy.crawler import CrawlerProcess
-from twisted.internet._sslverify import ClientTLSOptions
 
 from autoexif.filetypes import MIME_TO_CATEGORY, is_document_url
 
@@ -30,24 +27,6 @@ def _silence_scrapy_loggers():
     for name in _NOISY_LOGGERS:
         logging.getLogger(name).setLevel(logging.CRITICAL)
 
-
-class _NoVerifyTLSOptions(ClientTLSOptions):
-    """ClientTLSOptions that skips hostname verification entirely."""
-
-    def _identityVerifyingInfoCallback(self, connection, where, ret):
-        # Only set SNI, skip all verification
-        if where & SSL.SSL_CB_HANDSHAKE_START:
-            connection.set_tlsext_host_name(self._hostnameBytes)
-
-
-class NoVerifyContextFactory(ScrapyClientContextFactory):
-    """TLS context factory that skips all certificate and hostname verification."""
-
-    def creatorForNetloc(self, hostname, port):
-        return _NoVerifyTLSOptions(
-            hostname.decode("ascii"),
-            self.getContext(),
-        )
 
 
 def extract_allowed_domains(start_urls: list[str]) -> list[str]:
@@ -146,7 +125,6 @@ def run_spider(
         "DOWNLOAD_TIMEOUT": 15,
         "RETRY_TIMES": 1,
         "CONCURRENT_REQUESTS": max(concurrency, len(start_urls)),
-        "DOWNLOADER_CLIENTCONTEXTFACTORY": "autoexif.spider.NoVerifyContextFactory",
         "LOG_LEVEL": "ERROR",
         "REQUEST_FINGERPRINTER_IMPLEMENTATION": "2.7",
         "FEEDS": {

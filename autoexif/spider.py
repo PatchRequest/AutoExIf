@@ -8,8 +8,15 @@ from urllib.parse import urlparse
 
 import scrapy
 from scrapy.crawler import CrawlerProcess
+from scrapy.exceptions import IgnoreRequest
+from scrapy.spidermiddlewares.httperror import HttpError
 
 from autoexif.filetypes import MIME_TO_CATEGORY, is_document_url
+
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
 
 _NOISY_LOGGERS = (
     "scrapy.core.downloader.tls",
@@ -66,11 +73,17 @@ class DocumentSpider(scrapy.Spider):
             yield scrapy.Request(url, callback=self.parse, errback=self.on_error)
 
     def on_error(self, failure):
+        # robots.txt rejections are not crawl failures — stay silent
+        if failure.check(IgnoreRequest):
+            return
         url = failure.request.url
         host = urlparse(url).hostname or url
+        reason = failure.value.__class__.__name__
+        if failure.check(HttpError):
+            reason = f"HTTP {failure.value.response.status}"
         if host not in self.failed_hosts:
             self.failed_hosts.add(host)
-            print(f"    [!] Skipping {host} (unreachable)")
+            print(f"    [!] Skipping {host} ({reason})")
 
     def parse(self, response):
         content_type = response.headers.get("Content-Type", b"").decode("utf-8", errors="ignore")
@@ -118,6 +131,7 @@ def run_spider(
     tmp.close()
 
     settings = {
+        "USER_AGENT": DEFAULT_USER_AGENT,
         "DEPTH_LIMIT": depth,
         "DOWNLOAD_DELAY": delay,
         "CONCURRENT_REQUESTS_PER_DOMAIN": concurrency,

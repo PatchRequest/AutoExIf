@@ -1,8 +1,52 @@
 """CLI entry point for AutoExIf."""
 
+import re
 import shutil
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
+
+
+def _domain_of(url: str) -> str:
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    host = (parsed.netloc or parsed.path).split("/")[0].split(":")[0]
+    if host.startswith("www."):
+        host = host[4:]
+    return host
+
+
+def _derive_slug(args, urls: list[str]) -> str:
+    """Return a short, filename-safe slug identifying the target(s)."""
+    if args.crawl:
+        sources = args.crawl
+    elif args.urls_file:
+        sources = urls
+    else:
+        match = re.search(r"site:(\S+)", args.dork or "")
+        sources = [match.group(1)] if match else []
+
+    seen: set[str] = set()
+    domains: list[str] = []
+    for u in sources:
+        d = _domain_of(u)
+        if d and d not in seen:
+            seen.add(d)
+            domains.append(d)
+
+    if not domains:
+        return "results"
+    if len(domains) == 1:
+        slug = domains[0]
+    elif len(domains) <= 3:
+        slug = "-".join(domains)
+    else:
+        slug = f"{domains[0]}-plus{len(domains) - 1}"
+    return re.sub(r"[^A-Za-z0-9._-]", "_", slug)
+
+
+def _apply_slug(output: str, slug: str) -> Path:
+    p = Path(output)
+    return p.with_name(f"{p.stem}_{slug}{p.suffix}")
 
 
 def build_parser():
@@ -108,11 +152,13 @@ def main():
     print(f"\n[*] Running exiftool on {len(downloaded)} files...")
     rows = extract_all_metadata(downloaded)
 
-    # Step 4: Output
-    write_csv(rows, args.output)
+    # Step 4: Output — insert domain slug so multi-domain runs don't overwrite each other
+    slug = _derive_slug(args, urls)
+    csv_output = _apply_slug(args.output, slug)
+    write_csv(rows, str(csv_output))
 
-    json_output = str(Path(args.output).with_suffix(".json"))
-    write_json(rows, json_output)
+    json_output = csv_output.with_suffix(".json")
+    write_json(rows, str(json_output))
 
     summary = format_summary(rows)
     print(f"\n{summary}")

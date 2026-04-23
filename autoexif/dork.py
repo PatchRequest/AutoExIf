@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlparse
 import requests
 from bs4 import BeautifulSoup
 
-from autoexif.pipeline import USER_AGENTS
+from autoexif.pipeline import USER_AGENTS, _LenientHTTPSAdapter
 
 SKIP_DOMAINS = {"duckduckgo.com", "bing.com", "google.com", "google.de"}
 
@@ -30,6 +30,7 @@ def duckduckgo_search(dork: str, limit: int) -> list[str]:
     urls: list[str] = []
     session = requests.Session()
     session.verify = False
+    session.mount("https://", _LenientHTTPSAdapter())
     session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
 
     page = 0

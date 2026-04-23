@@ -8,12 +8,28 @@ import sys
 from collections import Counter
 from pathlib import Path, PurePosixPath
 
+import ssl
+
 import requests
 import urllib3
+from urllib3.util.ssl_ import create_urllib3_context
 
 from autoexif.filetypes import get_file_category
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+class _LenientHTTPSAdapter(requests.adapters.HTTPAdapter):
+    """HTTPS adapter that tolerates servers with broken/legacy TLS configs."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = create_urllib3_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        ctx.set_ciphers("DEFAULT:@SECLEVEL=1")
+        ctx.minimum_version = ssl.TLSVersion.TLSv1
+        kwargs["ssl_context"] = ctx
+        return super().init_poolmanager(*args, **kwargs)
 
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -65,6 +81,7 @@ def download_files(
     if session is None:
         session = requests.Session()
         session.verify = False
+        session.mount("https://", _LenientHTTPSAdapter())
         session.headers.update({"User-Agent": random.choice(USER_AGENTS)})
 
     downloaded: list[tuple[str, Path]] = []

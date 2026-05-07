@@ -140,20 +140,35 @@ def build_csv_columns(rows: list[dict]) -> list[str]:
 
 
 def write_csv(rows: list[dict], output_path: str) -> None:
-    """Write metadata rows to a CSV with dynamic columns."""
-    columns = build_csv_columns(rows)
-    with open(output_path, "w", newline="", encoding="utf-8") as f:
+    """Write metadata rows to a CSV, appending to existing data if present."""
+    path = Path(output_path)
+    existing_rows: list[dict] = []
+    if path.exists():
+        with open(path, "r", newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            existing_rows = list(reader)
+    all_rows = existing_rows + rows
+    columns = build_csv_columns(all_rows)
+    with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns, restval="", extrasaction="ignore")
         writer.writeheader()
-        writer.writerows(rows)
-    print(f"\n[+] CSV written to {output_path}")
+        writer.writerows(all_rows)
+    print(f"\n[+] CSV written to {output_path} ({len(all_rows)} total rows)")
 
 
 def write_json(rows: list[dict], output_path: str) -> None:
-    """Write full metadata to a JSON file."""
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(rows, f, indent=2, default=str)
-    print(f"[+] JSON written to {output_path}")
+    """Write full metadata to a JSON file, appending to existing data if present."""
+    path = Path(output_path)
+    existing_rows: list = []
+    if path.exists():
+        try:
+            existing_rows = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, ValueError):
+            existing_rows = []
+    all_rows = existing_rows + rows
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(all_rows, f, indent=2, default=str)
+    print(f"[+] JSON written to {output_path} ({len(all_rows)} total rows)")
 
 
 def format_summary(rows: list[dict]) -> str:

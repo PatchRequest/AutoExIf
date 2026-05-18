@@ -125,6 +125,12 @@ Full exiftool dump. Array of objects, one per file, with every field preserved e
 
 **Video:** MP4, AVI, MOV, MKV, WMV, WebM
 
+## Blog Post
+
+Read more about this project on [patchi.fyi](https://patchi.fyi):
+
+- [Metadata Stripping](https://patchi.fyi/blog/autoexif-metadata-stripping/)
+
 ## License
 
 MIT
